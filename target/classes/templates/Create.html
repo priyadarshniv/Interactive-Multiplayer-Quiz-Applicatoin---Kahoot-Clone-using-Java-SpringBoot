@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Genre</title>
+    <style>
+        body {
+            background-color: red;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        .genre-button {
+            padding: 10px 20px;
+            font-size: 1.2em;
+            cursor: pointer;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin: 10px;
+        }
+    </style>
+    <script>
+        function redirectToBasicScience() {
+            window.location.href = 'create/BasicScience';
+        }
+
+        function redirectToGeography() {
+            window.location.href = 'create/Geography';
+        }
+
+        function redirectToEconomics() {
+            window.location.href = 'create/Economics';
+        }
+
+
+    </script>
+
+</head>
+
+<body>
+
+<h1>Select a Genre for the Quiz</h1>
+
+<!-- Buttons for each genre -->
+<button class="genre-button" onclick="redirectToBasicScience()">Basic Science</button>
+<button class="genre-button" onclick="redirectToGeography()">Geography</button>
+<button class="genre-button" onclick="redirectToEconomics()">Economics</button>
+
+
+</body>
+
+</html>

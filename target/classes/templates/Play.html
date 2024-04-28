@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Play Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        #header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        #pin-entry {
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 10px;
+            margin: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button.correct-answer {
+            background-color: green;
+            color: white;
+        }
+
+        button.wrong-answer {
+            background-color: red;
+            color: white;
+        }
+
+        #question-container {
+            display: none;
+        }
+
+        #score-container p {
+            font-size: 18px;
+            margin: 5px 0;
+            padding: 5px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+    </style>
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.2/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+</head>
+<body>
+<div id="header">
+    <h2 id="user-name-display"></h2>
+</div>
+<div id="pin-entry">
+    <label for="pin-input">Enter PIN:</label>
+    <input type="text" id="pin-input" placeholder="Enter PIN">
+    <label for="name-input">Your Name:</label>
+    <input type="text" id="name-input" placeholder="Enter your name">
+    <button onclick="initializeGame()">Play</button>
+</div>
+
+<div id="question-container"></div>
+<div id="score-container"></div>
+<button id="results-button" type="button" onclick="showScore()">Show Results</button>
+
+<script>
+    var players = [];
+    var currentPlayerIndex = 0;
+    var correctAnswersCount = 0;
+    var questions;
+    var isServer = false; // Flag to identify the "server" tab
+    var socket;
+    var stompClient;
+    var rcount = 0;
+    var wcount = 0;
+
+    function initializeGame() {
+        var enteredPin = $("#pin-input").val();
+        var playerName = $("#name-input").val();
+
+        if (!playerName) {
+            alert("Please enter your name.");
+            return;
+        }
+
+        // Display the user name on top of each page
+        $("#user-name-display").text("Player: " + playerName);
+
+        $.ajax({
+            type: "GET",
+            url: "/create/api/verifyPin",
+            data: { enteredPin: parseInt(enteredPin) },
+            success: function(response) {
+                if (response === "true") {
+                    // Treat the first tab as the "server"
+                    isServer = true;
+                    // Connect to WebSocket
+                    connectWebSocket();
+                    // Fetch questions
+                    fetchQuestionsByIds(enteredPin);
+                    // Store player information
+                    players.push({ name: playerName, score: 0 });
+                    $("#pin-entry").hide();
+                } else {
+                    alert("Invalid PIN. Please try again.");
+                }
+            },
+            error: function(error) {
+                console.error("Error verifying PIN: " + error);
+            }
+        });
+    }
+
+    function connectWebSocket() {
+        socket = new SockJS('/quiz-websocket');
+        stompClient = Stomp.over(socket);
+
+        stompClient.connect({}, function(frame) {
+            stompClient.subscribe('/quiz/update', function(quizUpdate) {
+                var data = JSON.parse(quizUpdate.body);
+                console.log("Received update:", data.message, data.button);
+                rcount = rcount + 1;
+
+                if (data.message !== null && data.button !== null) {
+                    disableButton(data.button);
+                }
+            });
+        });
+    }
+
+    function fetchQuestionsByIds(pin) {
+        $.ajax({
+            type: "GET",
+            url: "/create/api/getQuestionsByPin",
+            data: { enteredPin: parseInt(pin) },
+            success: function(questionsData) {
+                questions = questionsData;
+                displayQuestions(questions);
+            },
+            error: function(error) {
+                console.error("Error fetching questions: " + error);
+            }
+        });
+    }
+
+    function displayQuestions(questions) {
+        var questionContainer = $("#question-container");
+        questionContainer.empty();
+
+        questions.forEach(function(question) {
+            var questionHtml = `
+                <div class="question" data-question-number="${question.questionNumber}">
+                    <h3>${question.question}</h3>
+                </div>
+            `;
+            questionContainer.append(questionHtml);
+
+            var optionsContainer = $("<div class='options-container'></div>");
+            question.options.forEach(function(option) {
+                var optionButton = $(`<button class='option-button' onclick='checkAnswer(this, "${option}", "${question.correctAnswer}", ${question.questionNumber})'>${option}</button>`);
+                optionsContainer.append(optionButton);
+            });
+
+            questionContainer.append(optionsContainer);
+        });
+
+        questionContainer.show();
+        $("#results-button").show();
+    }
+
+    function checkAnswer(button, selectedAnswer, correctAnswer, questionNumber) {
+        $(button).siblings().prop("disabled", true);
+
+        if (selectedAnswer === correctAnswer) {
+            $(button).addClass("correct-answer");
+            players[currentPlayerIndex].score++;
+            correctAnswersCount++;
+
+            // If this tab is the "server," send the answer and button to other clients via WebSocket
+            if (isServer) {
+                stompClient.send("/app/answer", {}, JSON.stringify({
+                    button: $(button).html(),  // Sending the button text as an example
+                    selectedAnswer: selectedAnswer,
+                    questionNumber: questionNumber
+                }));
+            }
+        } else {
+            wcount = wcount + 1;
+            $(button).addClass("wrong-answer");
+        }
+
+        console.log("wrong", wcount);
+        console.log("right", rcount);
+
+        var answeredQuestions = $(".correct-answer, .wrong-answer").length;
+        if (answeredQuestions === questions.length) {
+            showScore();
+        }
+
+        // Log the answer details for debugging
+        console.log("Sending Answer - Button Text:", $(button).html());
+        console.log("Selected Answer:", selectedAnswer);
+
+        // Move to the next player
+        currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+    }
+
+ function showScore() {
+            var scoreContainer = $("#score-container");
+            scoreContainer.empty();
+
+            players.forEach(function(player) {
+                var otherPlayers = players.filter(p => p !== player);
+                var otherScores = otherPlayers.map(op => `${op.name}: ${op.score} out of ${questions.length}`);
+                var combinedScores = [`${player.name}: ${player.score} out of ${questions.length}`].concat(otherScores);
+
+                combinedScores.forEach(function(score) {
+                    scoreContainer.append(`<p>${score}</p>`);
+                });
+            });
+
+            scoreContainer.show();
+            $("#results-button").hide();
+
+            // Delay for 2 seconds (adjust the time as needed)
+            setTimeout(function() {
+                // Redirect to http://localhost:8080
+                window.location.href = "http://localhost:8080";
+            }, 2000); // 2000 milliseconds (2 seconds)
+        }
+
+    function disableButton(buttonText) {
+        // Implement logic to disable buttons with the specified text
+        console.log("Disabling button with text:", buttonText);
+        $(".option-button:contains('" + buttonText + "')").siblings().prop("disabled", true);
+    }
+</script>
+</body>
+</html>

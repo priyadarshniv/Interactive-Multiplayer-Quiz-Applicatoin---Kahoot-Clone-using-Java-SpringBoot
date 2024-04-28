@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Your Page</title>
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <style>
+        body {
+            text-align: center;
+            margin: 20px;
+        }
+
+        #buttons-container {
+            margin-top: 20px;
+        }
+
+        .data-button {
+            margin: 5px;
+        }
+
+        #generate-pin-button {
+            margin-bottom: 10px;
+        }
+
+        #confirm-button {
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<button id="generate-pin-button">Generate PIN</button>
+<input type="text" id="pin-textbox" readonly>
+
+<div id="buttons-container"></div>
+<div id="results-container"></div>
+
+<button id="confirm-button">Confirm</button>
+
+<script>
+    function getRandomNumber(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    $(document).ready(function() {
+        var buttonsContainer = $("#buttons-container");
+        var resultsContainer = $("#results-container");
+        var pinTextbox = $("#pin-textbox");
+
+        // Array to store unique button IDs
+        var uniqueButtonIds = [];
+
+        // Array to store question IDs for the generated PIN
+        var questionIds = [];
+
+        // Add Generate PIN button click event
+        $("#generate-pin-button").click(function() {
+            // Reset arrays
+            uniqueButtonIds = [];
+            questionIds = [];
+
+            // Generate a new PIN
+            var generatedPin = generatePIN();
+            pinTextbox.val(generatedPin);
+
+            // Generate question IDs and add buttons
+            for (var i = 1; i <= 5; i++) {
+                var randomId = generateUniqueRandomID();
+                questionIds.push(randomId);
+
+                var button = $("<button>", {
+                    class: "data-button",
+                    "data-id": randomId,
+                    text: "Button " + i,
+                    click: function() {
+                        var buttonId = $(this).data("id");
+                        fetchDataAndDisplay(buttonId);
+                    }
+                });
+
+                var resultDiv = $("<div>", {
+                    id: "result" + randomId
+                });
+
+                buttonsContainer.append(button);
+                resultsContainer.append(resultDiv);
+            }
+        });
+
+        $("#confirm-button").click(function() {
+            // Get the PIN and question IDs
+            var _id = parseInt(pinTextbox.val());
+            var genreId = 2; // Assuming default genreId is 1 for basicScience
+
+            // Create the JSON object
+            var pinObject = {
+                _id: _id,
+                questionIds: questionIds,
+                genreId: genreId
+            };
+
+            console.log("Generated JSON Object:", pinObject);
+
+            // Send data to the server to store in the database
+            $.ajax({
+                type: "POST",
+                url: "api/savePin",
+                contentType: "application/json",
+                data: JSON.stringify(pinObject),
+                success: function(response) {
+                    console.log("PIN data saved successfully!");
+                    // You can redirect or perform any other action after successful save
+                },
+                error: function(error) {
+                    console.error("Error saving PIN data: " + error);
+                }
+            });
+        });
+
+        // Function to generate a unique random ID
+        function generateUniqueRandomID() {
+            var randomId = getRandomNumber(16,30);
+
+            // Check if the random ID is unique
+            while (uniqueButtonIds.includes(randomId)) {
+                randomId = getRandomNumber(16, 30);
+            }
+
+            // Add the random ID to the array
+            uniqueButtonIds.push(randomId);
+
+            return randomId;
+        }
+
+        // Function to generate a random 6-digit PIN
+        function generatePIN() {
+            return Math.floor(100000 + Math.random() * 900000);
+        }
+
+    });
+
+    function fetchDataAndDisplay(buttonId) {
+        $.ajax({
+            type: "GET",
+            url: "/fetchData1",
+            data: { ID: buttonId },
+            success: function(response) {
+                $("#result" + buttonId).html(response);
+                console.log("Fetched Data:", response);
+            },
+            error: function(error) {
+                console.error("Error fetching data: " + error);
+            }
+        });
+    }
+</script>
+</body>
+</html>
